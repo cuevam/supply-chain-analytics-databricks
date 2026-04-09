@@ -8,6 +8,43 @@ Built as a portfolio project targeting data engineering roles requiring Spark, D
 
 ## Architecture
 
+```mermaid
+flowchart TD
+    CSV[("CSV file\nDataCo · 180k rows")]
+
+    subgraph Ingest["Ingest — PySpark 3.5 + Delta Lake 3.2"]
+        BRONZE["Bronze\nRaw Delta table · schema sanitized"]
+        SILVER["Silver\nTyped · derived metrics · PII removed"]
+        GOLD["Gold\nDomain aggregation tables"]
+    end
+
+    subgraph Storage["Storage — Parquet + Delta log"]
+        PARQUET[("Parquet files\nColumnar · compressed")]
+        DLOG[("Delta log\nJSON · transaction history")]
+    end
+
+    subgraph Query["Query — DuckDB 1.5"]
+        DUCK["DuckDB\nReads Delta · exports snapshot"]
+        SQLITE[("SQLite\nsuperset.db")]
+    end
+
+    subgraph Viz["Visualization — Docker"]
+        SUPERSET["Apache Superset\nlocalhost:8088"]
+    end
+
+    CSV --> BRONZE
+    BRONZE --> SILVER
+    SILVER --> GOLD
+    GOLD --> PARQUET
+    PARQUET <--> DLOG
+    GOLD --> DUCK
+    DUCK --> SQLITE
+    SQLITE --> SUPERSET
+
+    ENV["WSL Ubuntu 24 · Python 3.12 · Java 17 · VS Code"]
+    style ENV fill:none,stroke-dasharray:4
+```
+
 ```
 Raw CSV
    │
