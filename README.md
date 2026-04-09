@@ -9,40 +9,42 @@ Built as a portfolio project targeting data engineering roles requiring Spark, D
 ## Architecture
 
 ```mermaid
-flowchart TD
-    CSV[("CSV file\nDataCo · 180k rows")]
+flowchart LR
+    CSV[("CSV file\nDataCo · 180k rows · 53 cols")]
 
-    subgraph Ingest["Ingest — PySpark 3.5 + Delta Lake 3.2"]
-        BRONZE["Bronze\nRaw Delta table · schema sanitized"]
+    subgraph SPARK["PySpark 3.5 — Medallion Pipeline"]
+        direction LR
+        BRONZE["Bronze\nRaw data · schema sanitized"]
         SILVER["Silver\nTyped · derived metrics · PII removed"]
-        GOLD["Gold\nDomain aggregation tables"]
+        GOLD["Gold\n4 domain tables"]
+        BRONZE --> SILVER --> GOLD
     end
 
-    subgraph Storage["Storage — Parquet + Delta log"]
-        PARQUET[("Parquet files\nColumnar · compressed")]
-        DLOG[("Delta log\nJSON · transaction history")]
+    subgraph STORAGE["Storage — Delta Lake 3.2"]
+        direction TB
+        PARQUET[("Parquet files\nColumnar · immutable · compressed")]
+        DLOG[("Delta log\nJSON · version history · vacuum")]
+        PARQUET <--> DLOG
     end
 
-    subgraph Query["Query — DuckDB 1.5"]
-        DUCK["DuckDB\nReads Delta · exports snapshot"]
-        SQLITE[("SQLite\nsuperset.db")]
+    subgraph SERVING["Serving Layer"]
+        direction LR
+        DUCK["DuckDB 1.5\nReads Delta · in-process · no JVM"]
+        SQLITE[("SQLite\nsuperset.db · BI snapshot")]
+        DUCK --> SQLITE
     end
 
-    subgraph Viz["Visualization — Docker"]
-        SUPERSET["Apache Superset\nlocalhost:8088"]
+    subgraph DEPLOY["Deployment — Docker"]
+        SUPERSET["Apache Superset\nDashboards · localhost:8088"]
     end
 
     CSV --> BRONZE
-    BRONZE --> SILVER
-    SILVER --> GOLD
-    GOLD --> PARQUET
-    PARQUET <--> DLOG
-    GOLD --> DUCK
-    DUCK --> SQLITE
+    GOLD --> STORAGE
+    STORAGE --> DUCK
     SQLITE --> SUPERSET
 
-    ENV["WSL Ubuntu 24 · Python 3.12 · Java 17 · VS Code"]
-    style ENV fill:none,stroke-dasharray:4
+    ENV["WSL Ubuntu 24 · Python 3.12 · Java 17 · VS Code · Git"]
+    style ENV fill:none,stroke-dasharray:5
 ```
 
 ```
