@@ -1,13 +1,185 @@
-supply-chain-analytics-databricks
+# Supply Chain Analytics Pipeline
 
-## Virtual environment
+A production-style medallion architecture pipeline built with PySpark, Delta Lake, and DuckDB. Processes 180k rows of supply chain data through Bronze → Silver → Gold layers, surfaced via Apache Superset dashboards.
 
-Create a project virtual environment and activate it before installing packages:
+Built as a portfolio project targeting data engineering roles requiring Spark, Delta Lake, and ETL/ELT experience.
 
-- Create: `python3 -m venv .venv`
-- Upgrade pip inside venv: `.venv/bin/python -m pip install --upgrade pip`
-- Activate (Linux/macOS): `source .venv/bin/activate`
-- Activate (Windows PowerShell): `./.venv/Scripts/Activate.ps1`
-- Install requirements: `pip install -r requirements.txt`
+---
 
-Recommended: add `.venv/` to `.gitignore` to avoid committing the environment.
+## Architecture
+
+```
+Raw CSV
+   │
+   ▼
+Bronze (Delta)          ← raw data landed as Delta table, schema sanitized
+   │
+   ▼
+Silver (Delta)          ← typed, cleaned, derived metrics, PII removed
+   │
+   ▼
+Gold (Delta)            ← domain-specific aggregation tables
+   │
+   ▼
+DuckDB Export           ← Gold tables exported to SQLite for BI consumption
+   │
+   ▼
+Apache Superset         ← dashboards and ad-hoc SQL exploration
+```
+
+## Tech Stack
+
+| Layer | Technology |
+|---|---|
+| Processing | PySpark 3.5 + Delta Lake 3.2 |
+| Orchestration | Manual (pipeline scripts) |
+| Storage format | Delta Lake (Parquet + transaction log) |
+| Query engine | DuckDB |
+| BI / Visualization | Apache Superset (Docker) |
+| Language | Python 3.12 |
+| Environment | WSL Ubuntu 24 / VS Code |
+
+---
+
+## Dataset
+
+- **Source**: DataCo Supply Chain Dataset (Kaggle)
+- **Rows**: 180,519
+- **Columns**: 53
+- **Period**: January 2015 — September 2017
+- **Domain**: Global e-commerce supply chain orders across 5 markets and 20 regions
+
+---
+
+## Pipeline
+
+### Bronze — `notebooks/01_bronze.py`
+- Reads raw CSV with `iso-8859-1` encoding
+- Sanitizes column names to snake_case for Delta compatibility
+- Writes Delta table to `lakehouse/bronze/orders_raw`
+- Vacuums orphaned files after each run
+
+### Silver — `notebooks/02_silver.py`
+- Casts data types (timestamps, doubles, integers)
+- Derives analytical columns:
+  - `shipping_delay` = actual days − scheduled days
+  - `is_late` = 1 if shipping_delay > 0
+  - `order_year`, `order_month` from order date
+  - `is_fraud_or_canceled` flag for downstream filtering
+- Drops PII columns (email, password, name, address)
+- Drops null-heavy columns identified in EDA (`product_description` 100% null, `order_zipcode` 86% null)
+- Deduplicates on `order_item_id`
+- Partitions by `order_year / order_month / order_region`
+
+### Gold — `notebooks/03_gold.py`
+Four domain-specific Delta tables, all excluding fraud/canceled orders:
+
+| Table | Description |
+|---|---|
+| `orders_base` | Full cleaned dataset for ad-hoc exploration |
+| `shipping_performance` | Avg delay and late rate by shipping mode and region |
+| `sales_performance` | Total sales and benefit by category, market, and segment |
+| `fulfillment` | On-time vs late counts and fulfillment rate by month |
+
+---
+
+## Key Findings
+
+**Late delivery is structural, not seasonal**
+- 57% of all orders are delivered late
+- Fulfillment rate was flat between 41–45% every month across all 3 years — no improvement trend
+
+**Premium shipping modes perform worst**
+- First Class shipping has a 100% late delivery rate (scheduled at 1 day, consistently takes 2)
+- Second Class is 80% late
+- This points to unrealistic scheduling expectations in premium tiers, not an operational failure in standard shipping
+
+**Top revenue categories**
+- Fishing is the #1 revenue category across LATAM, Europe, and Pacific Asia
+- LATAM is the strongest market overall
+- Profit ratios are consistent at 11–14% across all categories — no single category is significantly more profitable
+
+---
+
+## How to Run
+
+### Prerequisites
+- Python 3.12 with `.venv`
+- Java (OpenJDK 17)
+- Docker
+
+### Setup
+
+```bash
+# Clone the repo
+git clone https://github.com/YOUR_USERNAME/supply-chain-analytics-databricks
+cd supply-chain-analytics-databricks
+
+# Create and activate venv
+python -m venv .venv
+source .venv/bin/activate
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Download dataset from Kaggle and place at:
+# data/DataCoSupplyChainDataset.csv
+```
+
+### Run the pipeline
+
+```bash
+# Bronze
+python notebooks/01_bronze.py
+
+# Silver
+python notebooks/02_silver.py
+
+# Gold
+python notebooks/03_gold.py
+
+# Export Gold tables to SQLite for Superset
+python notebooks/04_export.py
+```
+
+### Start Superset
+
+```bash
+docker compose up -d
+
+# First time only — initialize Superset
+docker exec -it superset superset fab create-admin \
+  --username admin --firstname Admin --lastname Admin \
+  --email admin@example.com --password admin
+docker exec -it superset superset db upgrade
+docker exec -it superset superset init
+```
+
+Open `http://localhost:8088` and connect to `sqlite:////lakehouse/superset.db`.
+
+---
+
+## Project Structure
+
+```
+supply-chain-analytics-databricks/
+├── notebooks/
+│   ├── 01_bronze.py
+│   ├── 02_silver.py
+│   ├── 03_gold.py
+│   └── 04_export.py
+├── docker/
+│   └── superset_config.py
+├── data/                    ← not committed (add your CSV here)
+├── lakehouse/               ← not committed (generated by pipeline)
+├── docker-compose.yml
+├── requirements.txt
+└── README.md
+```
+
+---
+
+## Databricks Portability
+
+The pipeline is designed to run on Databricks without code changes. Only the SparkSession config needs to be updated — on Databricks the session is pre-configured, so the `.builder` block is replaced with `spark = SparkSession.getActiveSession()`. All Delta read/write paths would point to DBFS or Unity Catalog instead of local filesystem paths.
+```
