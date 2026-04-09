@@ -112,7 +112,7 @@ Four domain-specific Delta tables, all excluding fraud/canceled orders:
 
 ```bash
 # Clone the repo
-git clone https://github.com/YOUR_USERNAME/supply-chain-analytics-databricks
+git clone https://github.com/cuevam/supply-chain-analytics-databricks
 cd supply-chain-analytics-databricks
 
 # Create and activate venv
