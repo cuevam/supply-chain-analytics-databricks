@@ -12,39 +12,40 @@ Built as a portfolio project targeting data engineering roles requiring Spark, D
 flowchart LR
     CSV[("CSV file\nDataCo · 180k rows · 53 cols")]
 
-    subgraph SPARK["PySpark 3.5 — Medallion Pipeline"]
-        direction LR
-        BRONZE["Bronze\nRaw data · schema sanitized"]
-        SILVER["Silver\nTyped · derived metrics · PII removed"]
-        GOLD["Gold\n4 domain tables"]
-        BRONZE --> SILVER --> GOLD
-    end
+    subgraph ENV["Local Environment — WSL Ubuntu 24 · Python 3.12 · Java 17 · VS Code"]
 
-    subgraph STORAGE["Storage — Delta Lake 3.2"]
-        direction TB
-        PARQUET[("Parquet files\nColumnar · immutable · compressed")]
-        DLOG[("Delta log\nJSON · version history · vacuum")]
-        PARQUET <--> DLOG
-    end
+        subgraph SPARK["PySpark 3.5 — Medallion Pipeline"]
+            direction LR
+            BRONZE["Bronze\nRaw data · schema sanitized"]
+            SILVER["Silver\nTyped · derived metrics · PII removed"]
+            GOLD["Gold\n4 domain tables · partitioned"]
+            BRONZE --> SILVER --> GOLD
+        end
 
-    subgraph SERVING["Serving Layer"]
-        direction LR
-        DUCK["DuckDB 1.5\nReads Delta · in-process · no JVM"]
-        SQLITE[("SQLite\nsuperset.db · BI snapshot")]
-        DUCK --> SQLITE
-    end
+        subgraph STORAGE["Delta Lake 3.2 — Storage"]
+            direction TB
+            PARQUET[("Parquet files\nColumnar · immutable · compressed")]
+            DLOG[("Delta log\nTracks current version · enables vacuum")]
+            PARQUET <--> DLOG
+        end
 
-    subgraph DEPLOY["Deployment — Docker"]
-        SUPERSET["Apache Superset\nDashboards · localhost:8088"]
+        subgraph BI["Query & BI Layer"]
+            direction LR
+            DUCK["DuckDB 1.5\nReads Delta log · in-process · no JVM"]
+            SQLITE[("SQLite\nsuperset.db · static BI snapshot")]
+            DUCK --> SQLITE
+        end
+
+        subgraph DEPLOY["Deployment — Docker"]
+            SUPERSET["Apache Superset\nDashboards · localhost:8088"]
+        end
+
     end
 
     CSV --> BRONZE
-    GOLD --> STORAGE
+    SPARK <--> STORAGE
     STORAGE --> DUCK
     SQLITE --> SUPERSET
-
-    ENV["WSL Ubuntu 24 · Python 3.12 · Java 17 · VS Code · Git"]
-    style ENV fill:none,stroke-dasharray:5
 ```
 
 ```
